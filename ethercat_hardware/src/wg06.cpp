@@ -398,6 +398,7 @@ bool WG06::initializeFT(pr2_hardware_interface::HardwareInterface *hw)
         ROS_FATAL("A force/torque sensor of the name '%s' already exists.  Device #%02d has a duplicate name", force_torque_.name_.c_str(), sh_->get_ring_position());
         return false;
       }
+      ROS_INFO("A force/torque sensor of the name '%s' was registered.  Device #%02d.", force_torque_.name_.c_str(), sh_->get_ring_position());
     }
   }
 
@@ -596,8 +597,10 @@ bool WG06::unpackAccel(WG06StatusWithAccel *status, WG06StatusWithAccel *last_st
   for (int i = 0; i < count; ++i)
   {
     int32_t acc = status->accel_[count - i - 1];
+    //for 2g range: 256 LSB/g, 4g: 128 LSB/g, 8g: 64 LSB/g
     int range = (acc >> 30) & 3;
     float d = 1 << (8 - range);
+    //mask out and then do sign extension.
     accelerometer_.state_.samples_[i].x = 9.81 * ((((acc >>  0) & 0x3ff) << 22) >> 22) / d;
     accelerometer_.state_.samples_[i].y = 9.81 * ((((acc >> 10) & 0x3ff) << 22) >> 22) / d;
     accelerometer_.state_.samples_[i].z = 9.81 * ((((acc >> 20) & 0x3ff) << 22) >> 22) / d;
@@ -733,7 +736,7 @@ bool WG06::unpackFT(WG06StatusWithAccelAndFT *status, WG06StatusWithAccelAndFT *
 
   // Make room in data structure for more f/t samples
   ft_state.samples_.resize(usable_samples);
-
+  string ft_link_id = string(actuator_info_.name_) + "_force_torque_link";
   // If any f/t channel is overload or the sampling rate is bad, there is an error.
   ft_state.good_ = ( (!ft_sampling_rate_error_) && 
                      (ft_overload_flags_ == 0) && 
@@ -789,6 +792,7 @@ bool WG06::unpackFT(WG06StatusWithAccelAndFT *status, WG06StatusWithAccelAndFT *
   if ( (usable_samples > 0) && (ft_publisher_ != NULL) && (ft_publisher_->trylock()) )
   {
     ft_publisher_->msg_.header.stamp = current_time;
+    ft_publisher_->msg_.header.frame_id = ft_link_id;
     ft_publisher_->msg_.wrench = ft_state.samples_[usable_samples-1];
     ft_publisher_->unlockAndPublish();
   }
@@ -1087,17 +1091,22 @@ FTParamsInternal::FTParamsInternal()
 
 void FTParamsInternal::print() const
 {
+  std::stringstream offsets_str;
+  offsets_str << "Force/Torque offset = [";
   for (int i=0; i<6; ++i)
   {
-    ROS_INFO("offset[%d] = %f", i, offset(i));
+    offsets_str << offset(i) << ", ";
+  }
+  offsets_str << "]";
+  ROS_INFO("%s",offsets_str.str().c_str());
+
+  for (int i=0; i<6; ++i)
+  {
+    ROS_INFO("Force/Torque  gain[%d] = %f", i, gain(i));
   }
   for (int i=0; i<6; ++i)
   {
-    ROS_INFO("gain[%d] = %f", i, gain(i));
-  }
-  for (int i=0; i<6; ++i)
-  {
-    ROS_INFO("coeff[%d] = [%f,%f,%f,%f,%f,%f]", i, 
+    ROS_INFO("Force/Torque  coeff[%d] = [%f,%f,%f,%f,%f,%f]", i, 
              calibration_coeff(i,0), calibration_coeff(i,1), 
              calibration_coeff(i,2), calibration_coeff(i,3), 
              calibration_coeff(i,4), calibration_coeff(i,5)
