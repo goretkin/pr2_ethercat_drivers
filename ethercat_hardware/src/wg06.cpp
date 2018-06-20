@@ -352,7 +352,9 @@ bool WG06::initializeFT(pr2_hardware_interface::HardwareInterface *hw)
   // FT provides 6 values : 3 Forces + 3 Torques
   ft_raw_analog_in_.state_.state_.resize(6); 
   // FT usually provides 3-4 new samples per cycle
-  force_torque_.state_.samples_.reserve(4);
+  force_torque_.state_.samples_.reserve(MAX_FT_SAMPLES);
+  force_torque_.state_.raw_samples_.reserve(MAX_FT_SAMPLES);
+  force_torque_.state_.vhalf_.reserve(MAX_FT_SAMPLES);
   force_torque_.state_.good_ = true;
 
   // For now publish RAW F/T values for engineering purposes.  In future this publisher may be disabled by default.
@@ -724,7 +726,7 @@ bool WG06::unpackFT(WG06StatusWithAccelAndFT *status, WG06StatusWithAccelAndFT *
 
   unsigned new_samples = (unsigned(status->ft_sample_count_) - unsigned(last_status->ft_sample_count_)) & 0xFF;
   ft_sample_count_ += new_samples;
-  int missed_samples = std::max(int(0), int(new_samples) - 4);
+  int missed_samples = std::max(int(0), int(new_samples) - int(MAX_FT_SAMPLES));
   ft_missed_samples_ += missed_samples;
   unsigned usable_samples = min(new_samples, MAX_FT_SAMPLES); 
 
@@ -736,6 +738,8 @@ bool WG06::unpackFT(WG06StatusWithAccelAndFT *status, WG06StatusWithAccelAndFT *
 
   // Make room in data structure for more f/t samples
   ft_state.samples_.resize(usable_samples);
+  ft_state.raw_samples_.resize(usable_samples);
+  ft_state.vhalf_.resize(usable_samples);
   string ft_link_id = string(actuator_info_.name_) + "_force_torque_link";
   // If any f/t channel is overload or the sampling rate is bad, there is an error.
   ft_state.good_ = ( (!ft_sampling_rate_error_) && 
@@ -751,6 +755,12 @@ bool WG06::unpackFT(WG06StatusWithAccelAndFT *status, WG06StatusWithAccelAndFT *
     const FTDataSample &sample(status->ft_samples_[status_sample_index]); 
     geometry_msgs::Wrench &wrench(ft_state.samples_[sample_index]);
     convertFTDataSampleToWrench(sample, wrench);
+
+    for (int ax=0; ax<6; ++ax)
+    {
+      ft_state.raw_samples_[sample_index][ax] = status->ft_samples_[status_sample_index].data_[ax];
+    }
+    ft_state.vhalf_[sample_index] = status->ft_samples_[status_sample_index].vhalf_;
   }
 
   // Put newest sample into analog vector for controllers (deprecated)

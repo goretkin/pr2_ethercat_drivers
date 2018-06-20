@@ -215,7 +215,7 @@ private:
   realtime_tools::RealtimePublisher<pr2_msgs::AccelerometerState> *accel_publisher_;
 
   void convertFTDataSampleToWrench(const FTDataSample &sample, geometry_msgs::Wrench &wrench);
-  static const unsigned MAX_FT_SAMPLES = 4;  
+  static const unsigned MAX_FT_SAMPLES = 4;
   static const unsigned NUM_FT_CHANNELS = 6;
   static const int FT_VHALF_IDEAL = 32768; //!< Vhalf ADC measurement is ideally about (1<<16)/2
   static const int FT_VHALF_RANGE = 300;  //!< allow vhalf to range +/- 300 from ideal
